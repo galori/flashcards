@@ -322,6 +322,12 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
       <div class="import-tabs">
         <button class="import-tab active" onclick="setImportTab('paste')">Paste from Sheets</button>
         <button class="import-tab" onclick="setImportTab('csv')">CSV</button>
+        <button class="import-tab" onclick="setImportTab('quizlet')">Quizlet</button>
+      </div>
+      <div id="quizlet-file-row" class="hidden" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <input type="file" id="quizlet-file-inp" accept=".html" style="display:none" onchange="handleQuizletFile(this)">
+        <button class="btn btn-ghost" style="font-size:12px;padding:7px 14px;" onclick="document.getElementById('quizlet-file-inp').click()">📂 Choose saved HTML file</button>
+        <span style="font-size:12px;color:var(--text-muted);">or paste page source below</span>
       </div>
       <textarea id="imp-input" placeholder="Paste here..."></textarea>
       <div class="import-hint" id="imp-hint">Select two columns in Google Sheets (Term | Definition), copy, and paste here.</div>
@@ -611,9 +617,18 @@ function editCard(i){editIdx=i;document.getElementById('inp-term').value=cards[i
 function deleteCard(i){cards.splice(i,1);persist();renderDeck();}
 let importTab='paste';
 function showImportForm(){document.getElementById('import-form-area').classList.remove('hidden');document.getElementById('imp-input').focus();document.getElementById('imp-result').textContent='';}
-function cancelImport(){document.getElementById('import-form-area').classList.add('hidden');document.getElementById('imp-input').value='';}
-function setImportTab(t){importTab=t;document.querySelectorAll('.import-tab').forEach((b,i)=>b.classList.toggle('active',(t==='paste'&&i===0)||(t==='csv'&&i===1)));document.getElementById('imp-hint').textContent=t==='paste'?'Select two columns in Google Sheets, copy, paste here.':'One card per line: Term,Definition';}
+function cancelImport(){document.getElementById('import-form-area').classList.add('hidden');document.getElementById('imp-input').value='';document.getElementById('quizlet-file-inp').value='';}
+function setImportTab(t){
+  importTab=t;
+  document.querySelectorAll('.import-tab').forEach((b,i)=>b.classList.toggle('active',(t==='paste'&&i===0)||(t==='csv'&&i===1)||(t==='quizlet'&&i===2)));
+  const hints={paste:'Select two columns in Google Sheets (Term | Definition), copy, and paste here.',csv:'One card per line: Term,Definition',quizlet:'Choose a saved Quizlet .html file, or paste the page source (open the Quizlet URL, view-source:, then Cmd+A Cmd+C).'};
+  const placeholders={paste:'Paste here...',csv:'Paste here...',quizlet:'Paste Quizlet page source here...'};
+  document.getElementById('imp-hint').textContent=hints[t];
+  document.getElementById('imp-input').placeholder=placeholders[t];
+  document.getElementById('quizlet-file-row').classList.toggle('hidden',t!=='quizlet');
+}
 function doImport(){
+  if(importTab==='quizlet'){doQuizletImport();return;}
   const raw=document.getElementById('imp-input').value.trim();if(!raw)return;
   const parsed=[];
   for(const line of raw.split('\n').map(l=>l.trim()).filter(Boolean)){
@@ -627,6 +642,85 @@ function doImport(){
   cards.push(...parsed);persist();renderDeck();
   res.className='import-result';res.textContent=`✓ Imported ${parsed.length} card${parsed.length!==1?'s':''}!`;
   document.getElementById('imp-input').value='';setTimeout(cancelImport,1200);
+}
+
+function doQuizletImport(){
+  const raw=document.getElementById('imp-input').value.trim();
+  const res=document.getElementById('imp-result');
+  if(!raw){res.className='import-result err';res.textContent='Paste the Quizlet page source or choose an HTML file.';return;}
+  try{
+    const parsed=parseQuizletHtml(raw);
+    if(!parsed.length){res.className='import-result err';res.textContent='No cards found. Make sure this is a Quizlet page source.';return;}
+    cards.push(...parsed);persist();renderDeck();
+    res.className='import-result';res.textContent=`✓ Imported ${parsed.length} card${parsed.length!==1?'s':''}!`;
+    document.getElementById('imp-input').value='';setTimeout(cancelImport,1500);
+  }catch(e){
+    res.className='import-result err';res.textContent='Error: '+e.message;
+  }
+}
+
+async function handleQuizletFile(input){
+  const file=input.files[0];
+  if(!file) return;
+  const res=document.getElementById('imp-result');
+  try{
+    const html=await file.text();
+    const parsed=parseQuizletHtml(html);
+    if(!parsed.length){res.className='import-result err';res.textContent='No cards found in this file.';return;}
+    cards.push(...parsed);persist();renderDeck();
+    res.className='import-result';res.textContent=`✓ Imported ${parsed.length} card${parsed.length!==1?'s':''}!`;
+    setTimeout(cancelImport,1500);
+  }catch(e){
+    res.className='import-result err';res.textContent='Error: '+e.message;
+  }
+}
+
+function parseQuizletHtml(html){
+  // Extract the __NEXT_DATA__ JSON — works for both raw HTML and Chrome view-source saves
+  let jsonStr;
+  const rawMatch=html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if(rawMatch){
+    jsonStr=rawMatch[1];
+  }else{
+    // Chrome view-source format: script tag is HTML-encoded; JSON follows &gt;</span> as plain text
+    const ndPos=html.indexOf('__NEXT_DATA__');
+    if(ndPos===-1) throw new Error('Could not find Quizlet data in this HTML.');
+    const jsonStart=html.indexOf('&gt;</span>',ndPos)+'&gt;</span>'.length;
+    jsonStr=extractBalancedJson(html.slice(jsonStart));
+    if(!jsonStr) throw new Error('Could not extract Quizlet JSON.');
+  }
+  const outer=JSON.parse(jsonStr);
+  // Card data is serialized as a JSON string inside dehydratedReduxStateKey
+  const inner=outer?.props?.pageProps?.dehydratedReduxStateKey
+    ?JSON.parse(outer.props.pageProps.dehydratedReduxStateKey)
+    :outer;
+  const allSides=[];
+  (function walk(o){
+    if(!o||typeof o!=='object') return;
+    if(Array.isArray(o)){o.forEach(walk);return;}
+    if(o.cardSides){allSides.push(o.cardSides);return;}
+    Object.values(o).forEach(walk);
+  })(inner);
+  return allSides.map(sides=>{
+    const t=sides.find(s=>s.sideId===0)?.media?.find(m=>m.type===1)?.plainText;
+    const d=sides.find(s=>s.sideId===1)?.media?.find(m=>m.type===1)?.plainText;
+    return t&&d?{term:t,def:d,starred:false,score:0,attempts:0}:null;
+  }).filter(Boolean);
+}
+
+function extractBalancedJson(s){
+  let depth=0,inStr=false,esc=false;
+  for(let i=0;i<s.length;i++){
+    const c=s[i];
+    if(esc){esc=false;continue;}
+    if(c==='\\'&&inStr){esc=true;continue;}
+    if(c==='"'){inStr=!inStr;continue;}
+    if(!inStr){
+      if(c==='{')depth++;
+      else if(c==='}'){depth--;if(depth===0)return s.slice(0,i+1);}
+    }
+  }
+  return null;
 }
 
 function renderStudyHome(){document.getElementById('stat-total').textContent=cards.length;document.getElementById('stat-best').textContent=bestScore!==null?bestScore+'%':'—';document.getElementById('stat-sessions').textContent=sessions;document.getElementById('no-cards-msg').classList.toggle('hidden',cards.length>=4);}
