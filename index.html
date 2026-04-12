@@ -289,6 +289,8 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
 .toggle input:checked + .toggle-slider::before { transform:translateX(18px); background:var(--accent); }
 .danger-zone { border:1.5px dashed var(--red); border-radius:var(--radius); padding:16px; margin-top:6px; }
 .hidden { display:none; }
+.card-thumb { width:44px; height:44px; object-fit:cover; border-radius:var(--radius-sm); flex-shrink:0; margin-right:2px; }
+.flip-img { max-width:100%; max-height:130px; object-fit:contain; border-radius:var(--radius-sm); margin-bottom:10px; }
 
 /* EFFECTS */
 .confetti-container { position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:9999; }
@@ -340,6 +342,7 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
     <div id="add-form-area" class="add-form hidden">
       <input id="inp-term" placeholder="Term" />
       <textarea id="inp-def" placeholder="Definition"></textarea>
+      <input id="inp-img" placeholder="Image URL (optional)" style="margin-top:8px;" />
       <div class="form-row">
         <button class="btn btn-ghost" onclick="cancelAdd()">Cancel</button>
         <button class="btn btn-primary" onclick="addCard()">Save</button>
@@ -381,7 +384,7 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
       <div class="progress-label"><span id="progress-label">1 of 8</span><span id="score-live" style="color:var(--accent);font-weight:700;"></span></div>
       <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
       <div id="mode-flip" class="hidden">
-        <div class="flip-area" onclick="flipCard()"><div class="flip-inner" id="flip-inner"><div class="flip-face flip-front"><div class="flip-label">Term</div><div class="flip-text" id="flip-term">—</div><div class="flip-hint">tap to flip</div></div><div class="flip-face flip-back"><div class="flip-label">Definition</div><div class="flip-text" id="flip-def">—</div></div></div></div>
+        <div class="flip-area" onclick="flipCard()"><div class="flip-inner" id="flip-inner"><div class="flip-face flip-front"><div class="flip-label">Term</div><div class="flip-text" id="flip-term">—</div><div class="flip-hint">tap to flip</div></div><div class="flip-face flip-back"><div class="flip-label">Definition</div><img id="flip-img" class="flip-img" style="display:none" alt=""><div class="flip-text" id="flip-def">—</div></div></div></div>
         <div class="nav-row"><button class="nav-btn" onclick="flipNav(-1)">←</button><span class="counter" id="flip-counter">1 / 1</span><button class="nav-btn" onclick="flipNav(1)">→</button></div>
         <div class="knew-row"><button class="knew-btn knew-no" onclick="markKnew(false)">✗ Still learning</button><button class="knew-btn knew-yes" onclick="markKnew(true)">✓ Got it</button></div>
       </div>
@@ -507,6 +510,7 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-danger" onclick="clearStats()" style="font-size:12px;padding:7px 14px;">Reset stats</button>
           <button class="btn btn-danger" onclick="clearDeck()" style="font-size:12px;padding:7px 14px;">Delete all cards</button>
+          <button class="btn btn-danger" onclick="nukeAll()" style="font-size:12px;padding:7px 14px;">☢ Nuke all data</button>
         </div>
       </div>
     </div>
@@ -594,6 +598,7 @@ function setEffect(e){settings.effect=e;document.querySelectorAll('.effect-btn')
 function renderSettings(){document.getElementById('set-card-count').textContent=cards.length;document.getElementById('set-star-count').textContent=cards.filter(c=>c.starred).length;}
 function clearStats(){if(!confirm('Reset all stats?'))return;cards.forEach(c=>{c.score=0;c.attempts=0;});sessions=0;bestScore=null;persist();renderSettings();alert('Stats reset!');}
 function clearDeck(){if(!confirm('Delete ALL cards?'))return;cards=[];persist();renderDeck();renderSettings();}
+function nukeAll(){if(!confirm('Erase ALL data and start fresh?'))return;localStorage.clear();location.reload();}
 
 function renderDeck(){
   const q=(document.getElementById('search-inp').value||'').toLowerCase();
@@ -603,6 +608,7 @@ function renderDeck(){
   if(!filtered.length){list.innerHTML='';empty.classList.remove('hidden');return;}
   empty.classList.add('hidden');
   list.innerHTML=filtered.map(c=>`<div class="card-item">
+    ${c.img?`<img class="card-thumb" src="${esc(c.img)}" alt="" onerror="this.style.display='none'">`:'' }
     <div style="flex:1;min-width:0;"><div class="term">${esc(c.term)}${c.attempts>0?` <span style="font-size:10px;color:var(--text-muted);font-weight:400;">${Math.round(c.score/c.attempts*100)}%</span>`:''}</div><div class="def">${esc(c.def)}</div></div>
     <div class="actions"><button class="icon-btn star-btn" onclick="toggleStar(${c.i})">${c.starred?'★':'☆'}</button><button class="icon-btn" onclick="editCard(${c.i})">✏️</button><button class="icon-btn" onclick="deleteCard(${c.i})">🗑️</button></div>
   </div>`).join('');
@@ -611,9 +617,9 @@ function renderDeck(){
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function toggleStar(i){cards[i].starred=!cards[i].starred;persist();renderDeck();}
 function showAddForm(){document.getElementById('add-form-area').classList.remove('hidden');document.getElementById('inp-term').focus();editIdx=-1;}
-function cancelAdd(){document.getElementById('add-form-area').classList.add('hidden');document.getElementById('inp-term').value='';document.getElementById('inp-def').value='';editIdx=-1;}
-function addCard(){const t=document.getElementById('inp-term').value.trim(),d=document.getElementById('inp-def').value.trim();if(!t||!d)return;if(editIdx>=0){cards[editIdx].term=t;cards[editIdx].def=d;}else cards.push({term:t,def:d,starred:false,score:0,attempts:0});persist();cancelAdd();renderDeck();}
-function editCard(i){editIdx=i;document.getElementById('inp-term').value=cards[i].term;document.getElementById('inp-def').value=cards[i].def;document.getElementById('add-form-area').classList.remove('hidden');document.getElementById('inp-term').focus();}
+function cancelAdd(){document.getElementById('add-form-area').classList.add('hidden');document.getElementById('inp-term').value='';document.getElementById('inp-def').value='';document.getElementById('inp-img').value='';editIdx=-1;}
+function addCard(){const t=document.getElementById('inp-term').value.trim(),d=document.getElementById('inp-def').value.trim(),img=document.getElementById('inp-img').value.trim();if(!t||!d)return;if(editIdx>=0){cards[editIdx].term=t;cards[editIdx].def=d;cards[editIdx].img=img||undefined;}else cards.push({term:t,def:d,img:img||undefined,starred:false,score:0,attempts:0});persist();cancelAdd();renderDeck();}
+function editCard(i){editIdx=i;document.getElementById('inp-term').value=cards[i].term;document.getElementById('inp-def').value=cards[i].def;document.getElementById('inp-img').value=cards[i].img||'';document.getElementById('add-form-area').classList.remove('hidden');document.getElementById('inp-term').focus();}
 function deleteCard(i){cards.splice(i,1);persist();renderDeck();}
 let importTab='paste';
 function showImportForm(){document.getElementById('import-form-area').classList.remove('hidden');document.getElementById('imp-input').focus();document.getElementById('imp-result').textContent='';}
@@ -702,9 +708,12 @@ function parseQuizletHtml(html){
     Object.values(o).forEach(walk);
   })(inner);
   return allSides.map(sides=>{
+    const defSide=sides.find(s=>s.sideId===1);
     const t=sides.find(s=>s.sideId===0)?.media?.find(m=>m.type===1)?.plainText;
-    const d=sides.find(s=>s.sideId===1)?.media?.find(m=>m.type===1)?.plainText;
-    return t&&d?{term:t,def:d,starred:false,score:0,attempts:0}:null;
+    const d=defSide?.media?.find(m=>m.type===1)?.plainText;
+    const rawImg=defSide?.media?.find(m=>m.type===2)?.url;
+    const img=rawImg?'https://wsrv.nl/?url='+rawImg.replace(/^https?:\/\//,''):undefined;
+    return t&&d?{term:t,def:d,img,starred:false,score:0,attempts:0}:null;
   }).filter(Boolean);
 }
 
@@ -746,7 +755,7 @@ function retryMissed(){if(!missedCards.length)return;queue=[...new Set(missedCar
 function updateProgress(){document.getElementById('progress-fill').style.width=Math.round(qi/queue.length*100)+'%';document.getElementById('progress-label').textContent='Card '+(qi+1)+' of '+queue.length;if(settings.liveScore&&qi>0)document.getElementById('score-live').textContent=Math.round(score/qi*100)+'%';}
 let flipIdx=0;
 function startFlip(){flipIdx=0;document.getElementById('mode-flip').classList.remove('hidden');showFlipCard();}
-function showFlipCard(){const c=cards[queue[flipIdx]];document.getElementById('flip-term').textContent=c.term;document.getElementById('flip-def').textContent=c.def;document.getElementById('flip-inner').classList.remove('flipped');document.getElementById('flip-counter').textContent=(flipIdx+1)+' / '+queue.length;document.getElementById('progress-fill').style.width=Math.round(flipIdx/queue.length*100)+'%';document.getElementById('progress-label').textContent='Card '+(flipIdx+1)+' of '+queue.length;}
+function showFlipCard(){const c=cards[queue[flipIdx]];document.getElementById('flip-term').textContent=c.term;document.getElementById('flip-def').textContent=c.def;const fi=document.getElementById('flip-img');if(c.img){fi.src=c.img;fi.style.display='';}else{fi.src='';fi.style.display='none';}document.getElementById('flip-inner').classList.remove('flipped');document.getElementById('flip-counter').textContent=(flipIdx+1)+' / '+queue.length;document.getElementById('progress-fill').style.width=Math.round(flipIdx/queue.length*100)+'%';document.getElementById('progress-label').textContent='Card '+(flipIdx+1)+' of '+queue.length;}
 function flipCard(){document.getElementById('flip-inner').classList.toggle('flipped');}
 function flipNav(d){flipIdx=Math.max(0,Math.min(queue.length-1,flipIdx+d));showFlipCard();}
 function markKnew(ok){const i=queue[flipIdx];cards[i].attempts++;if(ok){cards[i].score++;triggerEffect(document.querySelector('.flip-area'));}else missedCards.push(i);flipNav(1);}
@@ -775,7 +784,7 @@ function showResults(){
   document.getElementById('progress-label').textContent='Done!';
   if(pct>=80)bigCelebrate();
 }
-function renderStarred(){const starred=cards.filter(c=>c.starred);const el=document.getElementById('starred-list');if(!starred.length){el.innerHTML='<div class="starred-empty">No starred cards yet.</div>';return;}el.innerHTML=starred.map(c=>`<div class="card-item" style="margin-bottom:10px;"><div style="flex:1;min-width:0;"><div class="term">${esc(c.term)}</div><div class="def">${esc(c.def)}</div></div><button class="icon-btn star-btn" onclick="unstar(${cards.indexOf(c)})">★</button></div>`).join('');}
+function renderStarred(){const starred=cards.filter(c=>c.starred);const el=document.getElementById('starred-list');if(!starred.length){el.innerHTML='<div class="starred-empty">No starred cards yet.</div>';return;}el.innerHTML=starred.map(c=>`<div class="card-item" style="margin-bottom:10px;">${c.img?`<img class="card-thumb" src="${esc(c.img)}" alt="" onerror="this.style.display='none'">`:''}<div style="flex:1;min-width:0;"><div class="term">${esc(c.term)}</div><div class="def">${esc(c.def)}</div></div><button class="icon-btn star-btn" onclick="unstar(${cards.indexOf(c)})">★</button></div>`).join('');}
 function unstar(i){cards[i].starred=false;persist();renderStarred();}
 
 const COLORS=['#6c8fff','#ff7eb3','#43d9ad','#ffd166','#a78bfa','#60c3f5','#ff2dff','#00f0ff'];
