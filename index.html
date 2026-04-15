@@ -309,6 +309,19 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
 .card-item.dragging { opacity:0.35; }
 .card-folder-tag { font-size:10px; color:var(--text-muted); margin-top:2px; }
 
+/* CARD TYPE TOGGLE */
+.type-toggle-row { display:flex; gap:6px; margin-bottom:12px; }
+.type-toggle-btn { flex:1; padding:8px; border-radius:var(--radius-sm); border:none; background:var(--bg); box-shadow:var(--sh-sm); cursor:pointer; font-size:12px; font-weight:600; color:var(--text-muted); font-family:inherit; transition:all .15s; }
+.type-toggle-btn.active { background:var(--accent); color:#fff; box-shadow:none; }
+.mcq-opt-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.mcq-opt-input { flex:1; min-width:0; border:none; border-radius:var(--radius-sm); padding:8px 12px; font-size:13px; font-family:inherit; background:var(--bg); box-shadow:var(--sh-in); color:var(--text); outline:none; }
+.mcq-correct-btn { width:22px; height:22px; flex-shrink:0; border-radius:50%; border:2px solid var(--text-muted); background:transparent; cursor:pointer; font-size:11px; transition:all .15s; }
+.mcq-correct-btn.correct { border-color:var(--green); background:var(--green); }
+.mcq-remove-btn { width:22px; height:22px; flex-shrink:0; border-radius:50%; border:none; background:var(--bg); color:var(--text-muted); cursor:pointer; font-size:15px; box-shadow:var(--sh-sm); display:flex; align-items:center; justify-content:center; line-height:1; }
+.add-opt-btn { width:100%; padding:7px; border-radius:var(--radius-sm); border:1.5px dashed var(--text-muted); background:transparent; color:var(--text-muted); cursor:pointer; font-size:12px; font-family:inherit; margin-top:4px; transition:all .15s; }
+.add-opt-btn:hover { border-color:var(--accent); color:var(--accent); }
+.card-type-badge { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; padding:1px 5px; border-radius:3px; background:var(--accent2); color:#fff; vertical-align:middle; margin-left:4px; }
+
 /* EFFECTS */
 .confetti-container { position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:9999; }
 .confetti-piece { position:absolute; width:8px; height:8px; border-radius:2px; animation:fall linear forwards; }
@@ -357,8 +370,17 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
       </div>
     </div>
     <div id="add-form-area" class="add-form hidden">
-      <input id="inp-term" placeholder="Term" />
-      <textarea id="inp-def" placeholder="Definition"></textarea>
+      <div class="type-toggle-row">
+        <button class="type-toggle-btn active" id="ttbtn-normal" onclick="setCardType('normal')">Normal</button>
+        <button class="type-toggle-btn" id="ttbtn-mcq" onclick="setCardType('mcq')">Fixed MCQ</button>
+      </div>
+      <input id="inp-term" placeholder="Term / Question" />
+      <div id="inp-def-wrap"><textarea id="inp-def" placeholder="Definition"></textarea></div>
+      <div id="inp-mcq-wrap" style="display:none;">
+        <div style="font-size:11px;color:var(--text-muted);margin:8px 0 6px;">Options — click ○ to mark the correct answer</div>
+        <div id="mcq-opt-list"></div>
+        <button class="add-opt-btn" onclick="addMcqOpt()">+ Add option</button>
+      </div>
       <input id="inp-img" placeholder="Image URL (optional)" style="margin-top:8px;" />
       <div class="form-row">
         <button class="btn btn-ghost" onclick="cancelAdd()">Cancel</button>
@@ -408,6 +430,7 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
         <div class="mode-card" onclick="startMode('type')"><div class="mode-icon">⌨️</div><div class="mode-name">Type It</div><div class="mode-desc">Type the answer</div><div class="mode-badge">Graded</div></div>
         <div class="mode-card" onclick="startMode('starred_only')"><div class="mode-icon">★</div><div class="mode-name">Starred Only</div><div class="mode-desc">Weak spots</div><div class="mode-badge">Focus</div></div>
         <div class="mode-card" onclick="startMode('spaced')"><div class="mode-icon">🧠</div><div class="mode-name">Spaced Review</div><div class="mode-desc">Smart order</div><div class="mode-badge">Smart</div></div>
+        <div class="mode-card" onclick="startMode('open')"><div class="mode-icon">💬</div><div class="mode-name">Open Ended</div><div class="mode-desc">Self-grade your answer</div><div class="mode-badge">Reflect</div></div>
       </div>
       <div id="no-cards-msg" class="hidden" style="text-align:center;color:var(--text-muted);font-size:14px;padding:16px;">Add at least 4 cards first!</div>
     </div>
@@ -442,6 +465,15 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
         <div style="display:flex;justify-content:center;gap:10px;">
           <button class="btn btn-ghost" id="type-submit" onclick="submitType()">Check</button>
           <button class="btn btn-primary hidden" id="type-next" onclick="nextQuestion()">Next →</button>
+        </div>
+      </div>
+      <div id="mode-open" class="hidden">
+        <div class="question-card" id="open-card"><div class="question-sub">Answer in your own words...</div><img id="open-img" class="question-img" style="display:none" alt=""><div class="question-text" id="open-term">—</div></div>
+        <textarea class="type-input" id="open-input" placeholder="Write your answer here..." style="min-height:80px;resize:vertical;"></textarea>
+        <div class="next-btn-row"><button class="btn btn-primary" id="open-reveal" onclick="revealOpen()">Reveal Answer →</button></div>
+        <div id="open-answer-area" class="hidden">
+          <div class="question-card" style="margin-top:12px;"><div class="question-sub">Correct answer</div><img id="open-ans-img" class="question-img" style="display:none" alt=""><div class="question-text" id="open-answer">—</div></div>
+          <div class="knew-row"><button class="knew-btn knew-no" onclick="gradeOpen(false)">✗ Still learning</button><button class="knew-btn knew-yes" onclick="gradeOpen(true)">✓ Got it</button></div>
         </div>
       </div>
       <div id="mode-results" class="hidden results">
@@ -576,6 +608,7 @@ let bestScore=load('bestScore',null);
 let folders=load('folders',[]);
 let currentFolder=null,dragCardIdx=null,studyFolder=null,editFolderId=null;
 let currentMode='',queue=[],qi=0,score=0,results=[],missedCards=[],editIdx=-1;
+let formCardType='normal',formMcqOptions=['','','',''],formMcqCorrect=0;
 
 function persist(){save('cards',cards);save('settings',settings);save('sessions',sessions);save('bestScore',bestScore);}
 
@@ -660,18 +693,41 @@ function renderDeck(){
   empty.classList.add('hidden');
   list.innerHTML=filtered.map(c=>{const folderName=c.folderId?folders.find(f=>f.id===c.folderId)?.name:null;return `<div class="card-item" draggable="true" ondragstart="dragCardIdx=${c.i};this.classList.add('dragging')" ondragend="this.classList.remove('dragging')">
     ${c.img?`<img class="card-thumb" src="${esc(c.img)}" alt="" onerror="this.style.display='none'">`:'' }
-    <div style="flex:1;min-width:0;"><div class="term">${esc(c.term)}${c.attempts>0?` <span style="font-size:10px;color:var(--text-muted);font-weight:400;">${Math.round(c.score/c.attempts*100)}%</span>`:''}</div><div class="def">${esc(c.def)}</div>${folderName?`<div class="card-folder-tag">📁 ${esc(folderName)}</div>`:''}</div>
+    <div style="flex:1;min-width:0;"><div class="term">${esc(c.term)}${c.attempts>0?` <span style="font-size:10px;color:var(--text-muted);font-weight:400;">${Math.round(c.score/c.attempts*100)}%</span>`:''}${c.type==='mcq'?'<span class="card-type-badge">MCQ</span>':''}</div><div class="def">${esc(cardDef(c))}</div>${folderName?`<div class="card-folder-tag">📁 ${esc(folderName)}</div>`:''}</div>
     <div class="actions"><button class="icon-btn star-btn" onclick="toggleStar(${c.i})">${c.starred?'★':'☆'}</button><button class="icon-btn" onclick="editCard(${c.i})">✏️</button><button class="icon-btn" onclick="deleteCard(${c.i})">🗑️</button></div>
   </div>`;}).join('');
   renderFolders();
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function cardDef(c){return c.type==='mcq'?c.options[c.correct]:c.def;}
 function toggleStar(i){cards[i].starred=!cards[i].starred;persist();renderDeck();}
-function showAddForm(){document.getElementById('add-form-area').classList.remove('hidden');document.getElementById('inp-term').focus();editIdx=-1;}
-function cancelAdd(){document.getElementById('add-form-area').classList.add('hidden');document.getElementById('inp-term').value='';document.getElementById('inp-def').value='';document.getElementById('inp-img').value='';editIdx=-1;}
-function addCard(){const t=document.getElementById('inp-term').value.trim(),d=document.getElementById('inp-def').value.trim(),img=document.getElementById('inp-img').value.trim();if(!t||!d)return;if(editIdx>=0){cards[editIdx].term=t;cards[editIdx].def=d;cards[editIdx].img=img||undefined;}else cards.push({term:t,def:d,img:img||undefined,starred:false,score:0,attempts:0,folderId:currentFolder||undefined});persist();cancelAdd();renderDeck();}
-function editCard(i){editIdx=i;document.getElementById('inp-term').value=cards[i].term;document.getElementById('inp-def').value=cards[i].def;document.getElementById('inp-img').value=cards[i].img||'';document.getElementById('add-form-area').classList.remove('hidden');document.getElementById('inp-term').focus();}
+function setCardType(t){formCardType=t;document.getElementById('ttbtn-normal').classList.toggle('active',t==='normal');document.getElementById('ttbtn-mcq').classList.toggle('active',t==='mcq');document.getElementById('inp-def-wrap').style.display=t==='normal'?'':'none';document.getElementById('inp-mcq-wrap').style.display=t==='mcq'?'':'none';}
+function renderMcqOptList(){document.getElementById('mcq-opt-list').innerHTML=formMcqOptions.map((opt,i)=>`<div class="mcq-opt-row"><button class="mcq-correct-btn${formMcqCorrect===i?' correct':''}" onclick="setMcqCorrect(${i})" title="Mark as correct"></button><input class="mcq-opt-input" value="${esc(opt)}" placeholder="Option ${i+1}" oninput="formMcqOptions[${i}]=this.value" />${formMcqOptions.length>2?`<button class="mcq-remove-btn" onclick="removeMcqOpt(${i})" title="Remove">×</button>`:''}</div>`).join('');document.querySelector('.add-opt-btn').style.display=formMcqOptions.length>=6?'none':'';}
+function setMcqCorrect(i){formMcqCorrect=i;renderMcqOptList();}
+function addMcqOpt(){if(formMcqOptions.length>=6)return;formMcqOptions.push('');renderMcqOptList();}
+function removeMcqOpt(i){if(formMcqOptions.length<=2)return;formMcqOptions.splice(i,1);if(formMcqCorrect>=formMcqOptions.length)formMcqCorrect=formMcqOptions.length-1;renderMcqOptList();}
+function showAddForm(){formCardType='normal';formMcqOptions=['','','',''];formMcqCorrect=0;setCardType('normal');document.getElementById('add-form-area').classList.remove('hidden');renderMcqOptList();document.getElementById('inp-term').focus();editIdx=-1;}
+function cancelAdd(){document.getElementById('add-form-area').classList.add('hidden');document.getElementById('inp-term').value='';document.getElementById('inp-def').value='';document.getElementById('inp-img').value='';formCardType='normal';formMcqOptions=['','','',''];formMcqCorrect=0;setCardType('normal');editIdx=-1;}
+function addCard(){
+  const t=document.getElementById('inp-term').value.trim(),img=document.getElementById('inp-img').value.trim();
+  if(!t)return;
+  if(formCardType==='mcq'){
+    const opts=formMcqOptions.map(o=>o.trim()).filter(o=>o);
+    if(opts.length<2)return;
+    const correct=Math.min(formMcqCorrect,opts.length-1);
+    const card={type:'mcq',term:t,options:opts,correct,img:img||undefined,starred:false,score:0,attempts:0,folderId:currentFolder||undefined};
+    if(editIdx>=0){const kept={starred:cards[editIdx].starred,score:cards[editIdx].score,attempts:cards[editIdx].attempts,folderId:cards[editIdx].folderId};Object.assign(cards[editIdx],card,kept);}
+    else cards.push(card);
+  }else{
+    const d=document.getElementById('inp-def').value.trim();
+    if(!d)return;
+    if(editIdx>=0){cards[editIdx].term=t;cards[editIdx].def=d;cards[editIdx].img=img||undefined;delete cards[editIdx].type;delete cards[editIdx].options;delete cards[editIdx].correct;}
+    else cards.push({term:t,def:d,img:img||undefined,starred:false,score:0,attempts:0,folderId:currentFolder||undefined});
+  }
+  persist();cancelAdd();renderDeck();
+}
+function editCard(i){editIdx=i;const c=cards[i];document.getElementById('inp-term').value=c.term;document.getElementById('inp-img').value=c.img||'';if(c.type==='mcq'){formCardType='mcq';formMcqOptions=[...c.options];formMcqCorrect=c.correct;document.getElementById('inp-def').value='';setCardType('mcq');renderMcqOptList();}else{formCardType='normal';document.getElementById('inp-def').value=c.def||'';setCardType('normal');}document.getElementById('add-form-area').classList.remove('hidden');document.getElementById('inp-term').focus();}
 function deleteCard(i){cards.splice(i,1);persist();renderDeck();}
 let importTab='paste';
 function showImportForm(){document.getElementById('import-form-area').classList.remove('hidden');document.getElementById('imp-input').focus();document.getElementById('imp-result').textContent='';}
@@ -811,9 +867,9 @@ function startMode(mode){
   else if(settings.shuffle)pool=shuffle(pool);
   queue=pool;qi=0;score=0;results=[];missedCards=[];
   document.getElementById('study-home').classList.add('hidden');document.getElementById('study-active').classList.remove('hidden');
-  const names={flip:'Flashcards',mcq:'Multiple Choice',tf:'True or False',type:'Type It',spaced:'Spaced Review'};
+  const names={flip:'Flashcards',mcq:'Multiple Choice',tf:'True or False',type:'Type It',spaced:'Spaced Review',open:'Open Ended'};
   document.getElementById('mode-tag').textContent=names[currentMode]||'Study';
-  ['flip','mcq','tf','type','results'].forEach(m=>document.getElementById('mode-'+m).classList.add('hidden'));
+  ['flip','mcq','tf','type','open','results'].forEach(m=>document.getElementById('mode-'+m).classList.add('hidden'));
   document.getElementById('score-live').textContent='';
   if(currentMode==='flip')startFlip();else{updateProgress();loadQuestion();}
   sessions++;
@@ -824,21 +880,24 @@ function retryMissed(){if(!missedCards.length)return;queue=[...new Set(missedCar
 function updateProgress(){document.getElementById('progress-fill').style.width=Math.round(qi/queue.length*100)+'%';document.getElementById('progress-label').textContent='Card '+(qi+1)+' of '+queue.length;if(settings.liveScore&&qi>0)document.getElementById('score-live').textContent=Math.round(score/qi*100)+'%';}
 let flipIdx=0;
 function startFlip(){flipIdx=0;document.getElementById('mode-flip').classList.remove('hidden');showFlipCard();}
-function showFlipCard(){const c=cards[queue[flipIdx]];document.getElementById('flip-term').textContent=c.term;document.getElementById('flip-def').textContent=c.def;const fi=document.getElementById('flip-img');if(c.img){fi.src=c.img;fi.style.display='';}else{fi.src='';fi.style.display='none';}document.getElementById('flip-inner').classList.remove('flipped');document.getElementById('flip-counter').textContent=(flipIdx+1)+' / '+queue.length;document.getElementById('progress-fill').style.width=Math.round(flipIdx/queue.length*100)+'%';document.getElementById('progress-label').textContent='Card '+(flipIdx+1)+' of '+queue.length;}
+function showFlipCard(){const c=cards[queue[flipIdx]];document.getElementById('flip-term').textContent=c.term;document.getElementById('flip-def').textContent=cardDef(c);const fi=document.getElementById('flip-img');if(c.img){fi.src=c.img;fi.style.display='';}else{fi.src='';fi.style.display='none';}document.getElementById('flip-inner').classList.remove('flipped');document.getElementById('flip-counter').textContent=(flipIdx+1)+' / '+queue.length;document.getElementById('progress-fill').style.width=Math.round(flipIdx/queue.length*100)+'%';document.getElementById('progress-label').textContent='Card '+(flipIdx+1)+' of '+queue.length;}
 function flipCard(){document.getElementById('flip-inner').classList.toggle('flipped');}
 function flipNav(d){flipIdx=Math.max(0,Math.min(queue.length-1,flipIdx+d));showFlipCard();}
 function markKnew(ok){const i=queue[flipIdx];cards[i].attempts++;if(ok){cards[i].score++;triggerEffect(document.querySelector('.flip-area'));}else missedCards.push(i);flipNav(1);}
-function loadQuestion(){document.getElementById('mode-'+currentMode).classList.remove('hidden');if(currentMode==='mcq')loadMCQ();else if(currentMode==='tf')loadTF();else if(currentMode==='type')loadType();}
-function loadMCQ(){const idx=queue[qi],c=cards[idx];document.getElementById('mcq-term').textContent=c.term;const mcqImg=document.getElementById('mcq-img');mcqImg.src=c.img||'';mcqImg.style.display='none';document.getElementById('mcq-feedback').textContent='';document.getElementById('mcq-next').classList.add('hidden');const wrong=shuffle(cards.filter((_,i)=>i!==idx)).slice(0,3);const opts=shuffle([{c,ok:true},...wrong.map(w=>({c:w,ok:false}))]);document.getElementById('mcq-options').innerHTML=opts.map(o=>`<button class="option-btn" onclick="answerMCQ(this,${o.ok},${idx})">${esc(o.c.def)}</button>`).join('');}
-function answerMCQ(btn,ok,idx){document.querySelectorAll('.option-btn').forEach(b=>b.disabled=true);cards[idx].attempts++;if(ok){btn.classList.add('correct');score++;cards[idx].score++;document.getElementById('mcq-feedback').textContent='Correct!';triggerEffect(document.getElementById('mcq-card'));if(settings.autoAdvance)setTimeout(nextQuestion,900);}else{btn.classList.add('wrong');document.querySelectorAll('.option-btn').forEach(b=>{if(b.textContent===cards[queue[qi]].def)b.classList.add('correct');});document.getElementById('mcq-feedback').textContent='Not quite.';triggerWrongEffect(btn);missedCards.push(queue[qi]);}const mcqImg=document.getElementById('mcq-img');if(mcqImg.src)mcqImg.style.display='';results.push(ok);if(!settings.autoAdvance||!ok)document.getElementById('mcq-next').classList.remove('hidden');}
+function loadQuestion(){document.getElementById('mode-'+currentMode).classList.remove('hidden');if(currentMode==='mcq')loadMCQ();else if(currentMode==='tf')loadTF();else if(currentMode==='type')loadType();else if(currentMode==='open')loadOpen();}
+function loadMCQ(){const idx=queue[qi],c=cards[idx];document.getElementById('mcq-card').querySelector('.question-sub').textContent=c.type==='mcq'?'Question':'Definition of...';document.getElementById('mcq-term').textContent=c.term;const mcqImg=document.getElementById('mcq-img');mcqImg.src=c.img||'';mcqImg.style.display='none';document.getElementById('mcq-feedback').textContent='';document.getElementById('mcq-next').classList.add('hidden');let opts;if(c.type==='mcq'){opts=shuffle(c.options.map((o,i)=>({text:o,ok:i===c.correct})));}else{const wrong=shuffle(cards.filter((_,i)=>i!==idx)).slice(0,3);opts=shuffle([{text:cardDef(c),ok:true},...wrong.map(w=>({text:cardDef(w),ok:false}))]);}document.getElementById('mcq-options').innerHTML=opts.map(o=>`<button class="option-btn" onclick="answerMCQ(this,${o.ok},${idx})">${esc(o.text)}</button>`).join('');}
+function answerMCQ(btn,ok,idx){document.querySelectorAll('.option-btn').forEach(b=>b.disabled=true);cards[idx].attempts++;if(ok){btn.classList.add('correct');score++;cards[idx].score++;document.getElementById('mcq-feedback').textContent='Correct!';triggerEffect(document.getElementById('mcq-card'));if(settings.autoAdvance)setTimeout(nextQuestion,900);}else{btn.classList.add('wrong');document.querySelectorAll('.option-btn').forEach(b=>{if(b.textContent===cardDef(cards[queue[qi]]))b.classList.add('correct');});document.getElementById('mcq-feedback').textContent='Not quite.';triggerWrongEffect(btn);missedCards.push(queue[qi]);}const mcqImg=document.getElementById('mcq-img');if(mcqImg.src)mcqImg.style.display='';results.push(ok);if(!settings.autoAdvance||!ok)document.getElementById('mcq-next').classList.remove('hidden');}
 let tfIsTrue=false;
-function loadTF(){const idx=queue[qi],c=cards[idx];tfIsTrue=Math.random()>.5;document.getElementById('tf-term').textContent=c.term;const tfImg=document.getElementById('tf-img');tfImg.src=c.img||'';tfImg.style.display='none';document.getElementById('tf-def').textContent=tfIsTrue?c.def:shuffle(cards.filter((_,i)=>i!==idx))[0].def;document.getElementById('tf-feedback').textContent='';document.getElementById('tf-next').classList.add('hidden');document.getElementById('tf-true').className='tf-btn';document.getElementById('tf-false').className='tf-btn';document.getElementById('tf-true').disabled=false;document.getElementById('tf-false').disabled=false;}
+function loadTF(){const idx=queue[qi],c=cards[idx];tfIsTrue=Math.random()>.5;document.getElementById('tf-term').textContent=c.term;const tfImg=document.getElementById('tf-img');tfImg.src=c.img||'';tfImg.style.display='none';document.getElementById('tf-def').textContent=tfIsTrue?cardDef(c):cardDef(shuffle(cards.filter((_,i)=>i!==idx))[0]);document.getElementById('tf-feedback').textContent='';document.getElementById('tf-next').classList.add('hidden');document.getElementById('tf-true').className='tf-btn';document.getElementById('tf-false').className='tf-btn';document.getElementById('tf-true').disabled=false;document.getElementById('tf-false').disabled=false;}
 function answerTF(ans){const ok=ans===tfIsTrue,idx=queue[qi];document.getElementById('tf-true').disabled=true;document.getElementById('tf-false').disabled=true;cards[idx].attempts++;const tB=document.getElementById('tf-true'),fB=document.getElementById('tf-false');if(ok){(ans?tB:fB).classList.add('correct');score++;cards[idx].score++;document.getElementById('tf-feedback').textContent='Correct!';triggerEffect(document.getElementById('tf-card'));if(settings.autoAdvance)setTimeout(nextQuestion,900);}else{(ans?tB:fB).classList.add('wrong');(tfIsTrue?tB:fB).classList.add('correct');document.getElementById('tf-feedback').textContent='It was '+(tfIsTrue?'true':'false')+'.';triggerWrongEffect(ans?tB:fB);missedCards.push(idx);}const tfImg=document.getElementById('tf-img');if(tfImg.src)tfImg.style.display='';results.push(ok);if(!settings.autoAdvance||!ok)document.getElementById('tf-next').classList.remove('hidden');}
 function loadType(){const c=cards[queue[qi]];document.getElementById('type-term').textContent=c.term;const typeImg=document.getElementById('type-img');typeImg.src=c.img||'';typeImg.style.display='none';const inp=document.getElementById('type-input');inp.value='';inp.className='type-input';inp.disabled=false;document.getElementById('type-feedback').textContent='';document.getElementById('type-next').classList.add('hidden');document.getElementById('type-submit').classList.remove('hidden');inp.focus();inp.onkeydown=e=>{if(e.key==='Enter')submitType();};}
-function submitType(){const c=cards[queue[qi]],ans=document.getElementById('type-input').value.trim().toLowerCase(),correct=c.def.toLowerCase();const ok=ans===correct||(correct.includes(ans)&&ans.length>4);const inp=document.getElementById('type-input');inp.disabled=true;document.getElementById('type-submit').classList.add('hidden');c.attempts++;if(ok){inp.classList.add('correct-input');document.getElementById('type-feedback').textContent='Correct!';score++;c.score++;triggerEffect(inp);if(settings.autoAdvance)setTimeout(nextQuestion,900);}else{inp.classList.add('wrong-input');document.getElementById('type-feedback').textContent='Answer: '+c.def;triggerWrongEffect(inp);}const typeImg=document.getElementById('type-img');if(typeImg.src)typeImg.style.display='';results.push(ok);if(!settings.autoAdvance||!ok)document.getElementById('type-next').classList.remove('hidden');}
+function submitType(){const c=cards[queue[qi]],ans=document.getElementById('type-input').value.trim().toLowerCase(),correct=cardDef(c).toLowerCase();const ok=ans===correct||(correct.includes(ans)&&ans.length>4);const inp=document.getElementById('type-input');inp.disabled=true;document.getElementById('type-submit').classList.add('hidden');c.attempts++;if(ok){inp.classList.add('correct-input');document.getElementById('type-feedback').textContent='Correct!';score++;c.score++;triggerEffect(inp);if(settings.autoAdvance)setTimeout(nextQuestion,900);}else{inp.classList.add('wrong-input');document.getElementById('type-feedback').textContent='Answer: '+cardDef(c);triggerWrongEffect(inp);}const typeImg=document.getElementById('type-img');if(typeImg.src)typeImg.style.display='';results.push(ok);if(!settings.autoAdvance||!ok)document.getElementById('type-next').classList.remove('hidden');}
+function loadOpen(){const c=cards[queue[qi]];document.getElementById('open-term').textContent=c.term;const img=document.getElementById('open-img');img.src=c.img||'';img.style.display='none';document.getElementById('open-input').value='';document.getElementById('open-input').disabled=false;document.getElementById('open-reveal').classList.remove('hidden');document.getElementById('open-answer-area').classList.add('hidden');}
+function revealOpen(){const c=cards[queue[qi]];document.getElementById('open-input').disabled=true;document.getElementById('open-reveal').classList.add('hidden');document.getElementById('open-answer').textContent=cardDef(c);const img=document.getElementById('open-ans-img');if(c.img){img.src=c.img;img.style.display='';}else{img.style.display='none';}document.getElementById('open-answer-area').classList.remove('hidden');}
+function gradeOpen(ok){const idx=queue[qi];cards[idx].attempts++;if(ok){cards[idx].score++;score++;triggerEffect(document.getElementById('open-card'));}else{missedCards.push(idx);}results.push(ok);nextQuestion();}
 function nextQuestion(){qi++;if(qi>=queue.length){showResults();return;}updateProgress();document.getElementById('mode-'+currentMode).classList.add('hidden');setTimeout(()=>loadQuestion(),80);}
 function showResults(){
-  ['mcq','tf','type'].forEach(m=>document.getElementById('mode-'+m).classList.add('hidden'));
+  ['mcq','tf','type','open'].forEach(m=>document.getElementById('mode-'+m).classList.add('hidden'));
   const pct=Math.round(score/queue.length*100);
   if(bestScore===null||pct>bestScore)bestScore=pct;
   persist();
