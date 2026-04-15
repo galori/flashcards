@@ -376,6 +376,13 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
       <div class="folder-chips" id="folder-chips"></div>
       <button class="new-folder-btn" onclick="createFolder()">＋ Folder</button>
     </div>
+    <div id="folder-form-area" class="add-form hidden">
+      <input id="folder-inp" placeholder="Folder name" />
+      <div class="form-row">
+        <button class="btn btn-ghost" onclick="cancelFolderForm()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveFolderForm()">Save</button>
+      </div>
+    </div>
     <div class="section-title" id="deck-count-label">0 cards</div>
     <div class="card-list" id="card-list"></div>
     <div class="empty hidden" id="empty-state">No cards yet!</div>
@@ -388,6 +395,10 @@ nav button.active { background:var(--bg2); box-shadow:var(--sh-sm); color:var(--
         <div class="stat-box"><div class="stat-num" id="stat-total">0</div><div class="stat-label">Cards</div></div>
         <div class="stat-box"><div class="stat-num" id="stat-best">—</div><div class="stat-label">Best score</div></div>
         <div class="stat-box"><div class="stat-num" id="stat-sessions">0</div><div class="stat-label">Sessions</div></div>
+      </div>
+      <div id="study-folder-row" style="display:none;margin-bottom:16px;">
+        <div class="section-title" style="margin-bottom:8px;">Study from</div>
+        <div class="folder-chips" id="study-folder-chips"></div>
       </div>
       <div class="section-title">Choose a mode</div>
       <div class="modes-grid">
@@ -563,7 +574,7 @@ let settings=load('settings',DEFAULTS.settings);
 let sessions=load('sessions',0);
 let bestScore=load('bestScore',null);
 let folders=load('folders',[]);
-let currentFolder=null,dragCardIdx=null;
+let currentFolder=null,dragCardIdx=null,studyFolder=null,editFolderId=null;
 let currentMode='',queue=[],qi=0,score=0,results=[],missedCards=[],editIdx=-1;
 
 function persist(){save('cards',cards);save('settings',settings);save('sessions',sessions);save('bestScore',bestScore);}
@@ -630,9 +641,12 @@ function nukeAll(){if(!confirm('Erase ALL data and start fresh?'))return;localSt
 
 function saveFolders(){save('folders',folders);}
 function setFolder(id){currentFolder=id;renderFolders();renderDeck();}
-function createFolder(){const name=prompt('Folder name:');if(!name||!name.trim())return;folders.push({id:'f'+Date.now(),name:name.trim()});saveFolders();renderFolders();}
-function renameFolder(id){const f=folders.find(f=>f.id===id);if(!f)return;const name=prompt('Rename folder:',f.name);if(!name||!name.trim())return;f.name=name.trim();saveFolders();renderFolders();}
-function deleteFolder(id){if(!confirm('Delete folder? Cards will become unfiled.'))return;folders=folders.filter(f=>f.id!==id);cards.forEach(c=>{if(c.folderId===id)delete c.folderId;});if(currentFolder===id)currentFolder=null;persist();saveFolders();renderFolders();renderDeck();}
+function showFolderForm(id){editFolderId=id||null;const inp=document.getElementById('folder-inp');inp.value=id?(folders.find(f=>f.id===id)?.name||''):'';document.getElementById('folder-form-area').classList.remove('hidden');inp.focus();if(id)inp.select();}
+function cancelFolderForm(){document.getElementById('folder-form-area').classList.add('hidden');document.getElementById('folder-inp').value='';editFolderId=null;}
+function saveFolderForm(){const name=document.getElementById('folder-inp').value.trim();if(!name)return;if(editFolderId){const f=folders.find(f=>f.id===editFolderId);if(f)f.name=name;}else{folders.push({id:'f'+Date.now(),name});}saveFolders();cancelFolderForm();renderFolders();}
+function createFolder(){showFolderForm(null);}
+function renameFolder(id){showFolderForm(id);}
+function deleteFolder(id){if(!confirm('Delete folder? Cards will become unfiled.'))return;folders=folders.filter(f=>f.id!==id);cards.forEach(c=>{if(c.folderId===id)delete c.folderId;});if(currentFolder===id)currentFolder=null;if(studyFolder===id)studyFolder=null;persist();saveFolders();renderFolders();renderDeck();}
 function dropCard(ev,folderId){ev.preventDefault();if(dragCardIdx===null)return;if(folderId==='_all'){delete cards[dragCardIdx].folderId;}else{cards[dragCardIdx].folderId=folderId;}persist();renderFolders();renderDeck();dragCardIdx=null;}
 function renderFolders(){const chips=document.getElementById('folder-chips');if(!chips)return;chips.innerHTML=[`<button class="folder-chip${currentFolder===null?' active':''}" onclick="setFolder(null)" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="dropCard(event,'_all');this.classList.remove('drag-over')">📂 All <span class="folder-count">${cards.length}</span></button>`,...folders.map(f=>{const cnt=cards.filter(c=>c.folderId===f.id).length;return `<button class="folder-chip${currentFolder===f.id?' active':''}" onclick="setFolder('${f.id}')" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="dropCard(event,'${f.id}');this.classList.remove('drag-over')">📁 ${esc(f.name)} <span class="folder-count">${cnt}</span><span class="folder-actions"><button class="folder-action-btn" style="background:var(--bg);box-shadow:var(--sh-sm)" onclick="event.stopPropagation();renameFolder('${f.id}')" title="Rename">✏</button><button class="folder-action-btn" style="background:var(--red);color:#fff" onclick="event.stopPropagation();deleteFolder('${f.id}')" title="Delete">×</button></span></button>`;})].join('');}
 
@@ -770,11 +784,28 @@ function extractBalancedJson(s){
   return null;
 }
 
-function renderStudyHome(){document.getElementById('stat-total').textContent=cards.length;document.getElementById('stat-best').textContent=bestScore!==null?bestScore+'%':'—';document.getElementById('stat-sessions').textContent=sessions;document.getElementById('no-cards-msg').classList.toggle('hidden',cards.length>=4);}
+function renderStudyHome(){
+  document.getElementById('stat-total').textContent=cards.length;
+  document.getElementById('stat-best').textContent=bestScore!==null?bestScore+'%':'—';
+  document.getElementById('stat-sessions').textContent=sessions;
+  const sfRow=document.getElementById('study-folder-row');
+  sfRow.style.display=folders.length?'':'none';
+  if(folders.length){
+    const sfc=document.getElementById('study-folder-chips');
+    sfc.innerHTML=[
+      `<button class="folder-chip${studyFolder===null?' active':''}" onclick="studyFolder=null;renderStudyHome()">📂 All <span class="folder-count">${cards.length}</span></button>`,
+      ...folders.map(f=>{const cnt=cards.filter(c=>c.folderId===f.id).length;return `<button class="folder-chip${studyFolder===f.id?' active':''}" onclick="studyFolder='${f.id}';renderStudyHome()">📁 ${esc(f.name)} <span class="folder-count">${cnt}</span></button>`;})
+    ].join('');
+  }
+  const pool=studyFolder?cards.filter(c=>c.folderId===studyFolder):cards;
+  document.getElementById('no-cards-msg').classList.toggle('hidden',pool.length>=4);
+}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
 function startMode(mode){
-  if(cards.length<4){document.getElementById('no-cards-msg').classList.remove('hidden');return;}
-  currentMode=mode;let pool=cards.map((_,i)=>i);
+  let pool=cards.map((_,i)=>i);
+  if(studyFolder)pool=pool.filter(i=>cards[i].folderId===studyFolder);
+  if(pool.length<4){document.getElementById('no-cards-msg').classList.remove('hidden');return;}
+  currentMode=mode;
   if(mode==='starred_only'){pool=pool.filter(i=>cards[i].starred);if(!pool.length){alert('Star some cards first!');return;}currentMode='mcq';}
   else if(mode==='spaced'){pool.sort((a,b)=>{const ra=cards[a].attempts?cards[a].score/cards[a].attempts:0,rb=cards[b].attempts?cards[b].score/cards[b].attempts:0;return ra-rb});}
   else if(settings.shuffle)pool=shuffle(pool);
@@ -834,6 +865,7 @@ function spawnEmoji(x,y){const c=document.getElementById('emoji-pop');for(let i=
 function spawnStars(x,y){const c=document.getElementById('confetti-container');for(let i=0;i<14;i++){const el=document.createElement('div');el.style.cssText=`position:absolute;left:${x+(Math.random()-.5)*110}px;top:${y+(Math.random()-.5)*30}px;width:10px;height:10px;background:${['#ffd166','#fff','#a78bfa','#ff2dff'][Math.floor(Math.random()*4)]};clip-path:polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);animation:fall ${.7+Math.random()*.5}s linear forwards;`;c.appendChild(el);setTimeout(()=>el.remove(),1300);}}
 function bigCelebrate(){for(let i=0;i<5;i++)setTimeout(()=>spawnConfetti(30,Math.random()*window.innerWidth,Math.random()*160+30),i*180);}
 
+document.getElementById('folder-inp').addEventListener('keydown',e=>{if(e.key==='Enter')saveFolderForm();else if(e.key==='Escape')cancelFolderForm();});
 renderDeck();
 renderFolders();
 </script>
